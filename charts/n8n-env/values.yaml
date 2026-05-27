@@ -6,13 +6,16 @@
 namespace: staging
 
 # Лейбли для NS — корисно для NetworkPolicy/PodSecurity admission.
-namespaceLabels:
-  environment: staging
+# Дефолт порожній: кожне середовище зобов'язане задати environment явно у своєму
+# HelmRelease (apps/{staging,production}/env.yaml). Інакше production-namespace
+# міг би тихо успадкувати staging-лейбл.
+namespaceLabels: {}
 
-# УВАГА: для навчального стенда. У продакшні — SOPS/Sealed Secrets/ESO.
+# УВАГА: plaintext placeholder. Перед деплоєм замінити на справжній ключ через
+# SOPS / Sealed Secrets / External Secrets Operator.
 # Один ключ для всіх реплік n8n у межах одного env, інакше credentials не розшифруються.
 n8n:
-  encryptionKey: "staging-demo-key-change-me"
+  encryptionKey: "REPLACE_BEFORE_DEPLOY"
 
 # CloudNativePG Cluster — БД для n8n. Підтримує і dev (1 instance), і HA (3 instances).
 postgres:
@@ -38,7 +41,7 @@ postgres:
   # HA: задавайте minSyncReplicas/maxSyncReplicas у prod overrides.
   minSyncReplicas: 0
   maxSyncReplicas: 0
-  # Anti-affinity. На single-node стенді встановіть topologyKey=kubernetes.io/hostname + enablePodAntiAffinity=false.
+  # Anti-affinity. На single-node кластері встановіть enablePodAntiAffinity=false.
   # Структура — як у CNPG Cluster.spec.affinity.
   affinity: {}
   #   enablePodAntiAffinity: false        # дозволити кілька instance на одному вузлі

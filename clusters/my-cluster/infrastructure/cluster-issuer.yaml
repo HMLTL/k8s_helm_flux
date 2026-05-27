@@ -1,6 +1,6 @@
-# Self-signed ClusterIssuer для production-Ingress. У реальному середовищі замініть
-# на Let's Encrypt (HTTP-01 / DNS-01). Self-signed достатньо для навчального стенда,
-# браузер показуватиме попередження — це нормально.
+# Self-signed ClusterIssuer для production-Ingress. Для публічних доменів
+# замініть на Let's Encrypt (HTTP-01 / DNS-01). Self-signed підходить для
+# внутрішніх endpoints; браузер показуватиме попередження.
 ---
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer

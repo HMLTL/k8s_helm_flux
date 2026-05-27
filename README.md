@@ -34,7 +34,7 @@ GitOps репозиторій, у якому будь-який коміт у `ma
 │       └── templates/
 │           ├── _helpers.tpl
 │           ├── namespace.yaml
-│           ├── secret.yaml                 # N8N_ENCRYPTION_KEY (демо!)
+│           ├── secret.yaml                 # N8N_ENCRYPTION_KEY (plaintext placeholder — замінити на SOPS)
 │           └── postgres-cluster.yaml       # kind: Cluster (CNPG)
 │
 ├── clusters/my-cluster/                    # bootstrap path; flux-system Kustomization сканує цю теку
@@ -125,7 +125,7 @@ StatefulSet/Deployment для баз даних" не порушується.
 | TLS                             | вимкнено               | self-signed (cert-manager)       |
 | Image                           | `n8nio/n8n:1.122.4`    | `ghcr.io/mykolap/k8s_helm_flux/n8n:1.x.x` (Image Automation) |
 
-## Як запустити (для майбутнього живого кластера)
+## Як запустити
 
 ```bash
 export GITHUB_TOKEN=<PAT_repo_scope>
@@ -147,11 +147,24 @@ flux bootstrap github \
 
 ```bash
 helm lint charts/n8n-env
-helm template n8n-env-staging charts/n8n-env                              # дефолти (≈ staging)
+
+# staging (відтворює apps/staging/env.yaml):
+helm template n8n-env-staging charts/n8n-env \
+  --set namespace=staging \
+  --set namespaceLabels.environment=staging
+
+# production (відтворює apps/production/env.yaml):
 helm template n8n-env-prod charts/n8n-env \
-  --set namespace=production --set postgres.instances=3 \
-  --set postgres.minSyncReplicas=1 --set postgres.maxSyncReplicas=1
+  --set namespace=production \
+  --set namespaceLabels.environment=production \
+  --set postgres.instances=3 \
+  --set postgres.minSyncReplicas=1 \
+  --set postgres.maxSyncReplicas=1
 ```
+
+> `namespaceLabels` за замовчуванням `{}` — кожен env зобов'язаний задати
+> `environment` явно у своєму HelmRelease. Це навмисно: інакше production-NS
+> міг би тихо успадкувати staging-лейбл.
 
 ## Definition of Done (з плану)
 
@@ -212,13 +225,15 @@ main:
 - При **видаленні HelmRelease** Helm видаляє і CRD → орфанить усі CR (втрата кластера БД).
 - При **upgrade** `CreateReplace` перезаписує CRD; якщо нова версія несумісна з існуючими CR — фейл валідації.
 
-Для прод-кластерів рекомендований паттерн — окрема Flux Kustomization з CRD-YAML
-+ HelmRelease з `--skip-crds`. Для навчального стенда залишаємо Helm-managed.
+Для прод-критичних інсталяцій рекомендований паттерн — окрема Flux Kustomization
+з CRD-YAML + HelmRelease з `--skip-crds`. У цьому репо залишено Helm-managed
+для простоти; рефакторинг тривіальний, коли знадобиться.
 
-## SOPS: як це виглядатиме після виходу з демо
+## SOPS: шифрування Secrets
 
-Demo-Secrets (`N8N_ENCRYPTION_KEY`) у Git — наразі в plaintext. Production-ready
-варіант через SOPS + age:
+`N8N_ENCRYPTION_KEY` лежить у Git як plaintext placeholder
+(`REPLACE_BEFORE_DEPLOY`). Перед першим деплоєм замініть на справжній ключ
+та зашифруйте через SOPS + age:
 
 ```bash
 # 1. Згенерувати age-ключ і додати у kube-secret:
@@ -255,12 +270,12 @@ spec:
   `selfsigned` `ClusterIssuer`; `production` Ingress отримує `tls:` блок і
   cert-manager автоматично виписує сертифікат у `Secret n8n-tls`.
 
-## Застереження для навчального стенда
+## Експлуатаційні нотатки
 
-- `N8N_ENCRYPTION_KEY` лежить у `Secret` у Git **тільки для демо**. Real-life
-  патерн — див. секцію "SOPS" вище.
+- `N8N_ENCRYPTION_KEY` у Git — це plaintext placeholder. Перед першим деплоєм
+  замініть на справжнє значення та зашифруйте через SOPS (див. секцію "SOPS" вище).
 - `Cluster` (CNPG) у `production` встановлено на 3 інстанси з default
-  pod-anti-affinity. На single-node стенді (Rancher Desktop / Minikube) поди
+  pod-anti-affinity. На single-node кластері (Rancher Desktop / Minikube) поди
   залишаться `Pending`. Два рішення:
   ```yaml
   # apps/production/env.yaml — або зменшити масштаб:

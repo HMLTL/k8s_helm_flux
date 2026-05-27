@@ -2,9 +2,9 @@
 # що матеріалізує StatefulSet+Service+Secret для PostgreSQL-кластера.
 # Інстанси БД (kind: Cluster) рендеряться шаблоном charts/n8n-env/templates/postgres-cluster.yaml.
 #
-# CRD керуються Helm-ом (crds: Create / CreateReplace). Для прод-кластерів
-# рекомендований паттерн — окрема Flux Kustomization з CRD-маніфестами +
-# чарт з `--skip-crds`. Для навчального стенда залишаємо Helm-managed.
+# CRD керуються Helm-ом (crds: Create / CreateReplace). Для прод-критичних
+# інсталяцій рекомендований паттерн — окрема Flux Kustomization з CRD-маніфестами
+# + чарт з `--skip-crds`. Тут залишено Helm-managed для простоти.
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease

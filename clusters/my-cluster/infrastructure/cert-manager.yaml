@@ -32,7 +32,7 @@ spec:
         namespace: flux-system
   values:
     installCRDs: true
-    # Мінімалістично — без webhook HA, бо single-node стенд.
+    # Мінімалістично — без webhook HA. Збільшіть replicaCount, якщо потрібна HA.
     replicaCount: 1
     webhook:
       replicaCount: 1

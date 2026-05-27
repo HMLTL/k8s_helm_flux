@@ -11,7 +11,7 @@ LABEL org.opencontainers.image.source="https://github.com/mykolap/k8s_helm_flux"
       org.opencontainers.image.revision="${GIT_SHA}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.title="n8n (k8s_helm_flux)" \
-      org.opencontainers.image.description="n8n image для GitOps-демо (Flux + CNPG)"
+      org.opencontainers.image.description="n8n image for GitOps deployment (Flux + CNPG)"
 
 # Місце для custom nodes:
 # USER root

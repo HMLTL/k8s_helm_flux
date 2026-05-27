@@ -1,4 +1,4 @@
-# ingress-nginx — IngressClass "nginx" для обох середовищ. На single-node стенді
+# ingress-nginx — IngressClass "nginx" для обох середовищ. На single-node кластері
 # (Rancher Desktop / Minikube) сервіс типу LoadBalancer отримає вузловий IP або
 # 127.0.0.1; на хмарному кластері — зовнішній LB.
 ---

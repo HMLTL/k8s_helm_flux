@@ -200,9 +200,9 @@ spec:
     # infra через Helm, бо заборона "plain StatefulSet" стосується БД застосунку.
     valkey:
       enabled: true
-      architecture: standalone        # 1 нода (для learning); replication — у HA-сценарії
+      architecture: standalone        # 1 нода; для повної HA — architecture: replication
       auth:
-        enabled: false                # для learning; у проді — увімкнути + Secret
+        enabled: false                # для зовнішніх кластерів — увімкнути + Secret з паролем
       primary:
         persistence:
           enabled: true
