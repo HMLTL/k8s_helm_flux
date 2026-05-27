@@ -1,0 +1,40 @@
+# Усі зовнішні джерела чартів — окремо від HelmRelease для прозорості і повторного
+# використання (один HelmRepository може обслуговувати кілька HelmRelease).
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: cloudnative-pg
+  namespace: flux-system
+spec:
+  type: oci                                  # CNPG публікує OCI-чарт у GHCR
+  interval: 1h
+  url: oci://ghcr.io/cloudnative-pg/charts
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: jetstack
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://charts.jetstack.io            # cert-manager
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: ingress-nginx
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://kubernetes.github.io/ingress-nginx
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: n8n
+  namespace: flux-system
+spec:
+  type: oci                                  # 8gears n8n chart, OCI-публікація
+  interval: 1h
+  url: oci://8gears.container-registry.com/library

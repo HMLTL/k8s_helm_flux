@@ -1,0 +1,40 @@
+# cert-manager — генерує і ротейтить TLS-сертифікати на запит Ingress (через
+# anotації) або декларативного ресурсу kind: Certificate. У staging вимкнено TLS;
+# у production використовується self-signed ClusterIssuer
+# (clusters/my-cluster/infrastructure/cluster-issuer.yaml).
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cert-manager
+  namespace: flux-system
+spec:
+  interval: 30m
+  releaseName: cert-manager
+  targetNamespace: cert-manager
+  install:
+    createNamespace: true
+    crds: Create
+    remediation:
+      retries: 3
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  chart:
+    spec:
+      chart: cert-manager
+      version: "v1.20.x"          # latest stable станом на травень 2026
+      sourceRef:
+        kind: HelmRepository
+        name: jetstack
+        namespace: flux-system
+  values:
+    installCRDs: true
+    # Мінімалістично — без webhook HA, бо single-node стенд.
+    replicaCount: 1
+    webhook:
+      replicaCount: 1
+    cainjector:
+      replicaCount: 1

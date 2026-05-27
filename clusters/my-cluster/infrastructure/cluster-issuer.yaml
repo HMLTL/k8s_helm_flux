@@ -1,0 +1,10 @@
+# Self-signed ClusterIssuer для production-Ingress. У реальному середовищі замініть
+# на Let's Encrypt (HTTP-01 / DNS-01). Self-signed достатньо для навчального стенда,
+# браузер показуватиме попередження — це нормально.
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}

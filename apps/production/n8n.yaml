@@ -1,0 +1,228 @@
+# HelmRelease n8n у production — queue mode (Valkey + worker), HPA 2..5 на main,
+# TLS через cert-manager, image з GHCR.
+#
+# ARCHITECTURE: чому queue mode обов'язковий, коли репліка n8n > 1
+#   n8n у default (regular) mode — single-process app. Дві репліки спричиняють:
+#     - дубльоване виконання cron-тригерів (у кожному поді власний scheduler)
+#     - webhook-події, що обриваються при load-balance на інший под
+#     - конкурентність на пам'яті виконання
+#   Queue mode переносить scheduler та workflow-executors на Valkey/Redis +
+#   worker-поди, тож кілька main-реплік стають безпечними (UI/API + dispatch).
+#
+# 8gears chart 2.0.x включає Valkey як subchart (built-in), окремий
+# HelmRelease для Redis не потрібен.
+#
+# Image tag оновлюється Flux Image Automation; маркер ставимо тільки на tag —
+# на repository не маркуємо (інакше Automation переписувала б і шлях до образу).
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: n8n-production
+  namespace: flux-system
+spec:
+  interval: 1m
+  releaseName: n8n
+  targetNamespace: production
+  dependsOn:
+    - name: n8n-env-production
+    - name: cert-manager
+    - name: ingress-nginx
+  driftDetection:
+    mode: enabled
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  chart:
+    spec:
+      chart: n8n
+      version: "2.0.x"
+      sourceRef:
+        kind: HelmRepository
+        name: n8n
+        namespace: flux-system
+  values:
+    image:
+      repository: ghcr.io/mykolap/k8s_helm_flux/n8n
+      tag: "1.122.4" # {"$imagepolicy": "flux-system:n8n:tag"}
+      pullPolicy: IfNotPresent
+
+    # ── main: editor + REST API. У queue mode НЕ виконує workflow ───────────
+    main:
+      # replicaCount ігнорується, поки autoscaling.enabled=true.
+
+      # main.config — fallback YAML→config.json. Дублюємо ключові поля через
+      # extraEnv, бо env-змінні мають вищий пріоритет, а chart-docs не
+      # документують точне перетворення config→env.
+      config:
+        db:
+          type: postgresdb
+          postgresdb:
+            host: n8n-postgres-rw
+            port: 5432
+            database: n8n
+            user: n8n
+        executions:
+          mode: queue
+        queue:
+          bull:
+            redis:
+              host: n8n-valkey-primary
+              port: 6379
+
+      extraEnv:
+        # ── чітко закріплюємо queue mode ────────────────────────────────────
+        EXECUTIONS_MODE:
+          value: queue
+        # Service name Valkey-subchart: <release>-valkey-primary (release=n8n).
+        # Якщо subchart дасть іншу назву — змінити обидва значення нижче.
+        QUEUE_BULL_REDIS_HOST:
+          value: n8n-valkey-primary
+        QUEUE_BULL_REDIS_PORT:
+          value: "6379"
+        # ── n8n endpoint ────────────────────────────────────────────────────
+        N8N_HOST:
+          value: n8n.local
+        N8N_PROTOCOL:
+          value: https
+        WEBHOOK_URL:
+          value: https://n8n.local/
+        N8N_PORT:
+          value: "5678"
+        GENERIC_TIMEZONE:
+          value: Europe/Kyiv
+        N8N_PROXY_HOPS:
+          value: "1"                  # довіряти 1 hop X-Forwarded-* (за ingress-nginx)
+        # ── secrets ─────────────────────────────────────────────────────────
+        DB_POSTGRESDB_PASSWORD:
+          valueFrom:
+            secretKeyRef:
+              name: n8n-postgres-app
+              key: password
+        N8N_ENCRYPTION_KEY:
+          valueFrom:
+            secretKeyRef:
+              name: n8n-app
+              key: N8N_ENCRYPTION_KEY
+
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "512Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+
+      persistence:
+        enabled: true
+        type: dynamic
+        size: 5Gi
+
+      podSecurityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop: ["ALL"]
+
+      # ← Сюди прив'язана вимога плану "HPA від 2 до 5 подів".
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 5
+        targetCPUUtilizationPercentage: 70
+
+    # ── worker: виконує workflow з черги Valkey. Тут реальна "обчислювальна сила" ──
+    worker:
+      enabled: true
+      replicaCount: 2                 # старт з 2; HPA не вмикаємо тут — план просить HPA на main
+      concurrency: 10
+      # Worker сам читає DB і Redis з env — config-файл йому не мапиться,
+      # тому всі підключення задаємо явно тут.
+      config:
+        db:
+          type: postgresdb
+          postgresdb:
+            host: n8n-postgres-rw
+            port: 5432
+            database: n8n
+            user: n8n
+        executions:
+          mode: queue
+        queue:
+          bull:
+            redis:
+              host: n8n-valkey-primary
+              port: 6379
+      extraEnv:
+        EXECUTIONS_MODE:
+          value: queue
+        QUEUE_BULL_REDIS_HOST:
+          value: n8n-valkey-primary
+        QUEUE_BULL_REDIS_PORT:
+          value: "6379"
+        DB_POSTGRESDB_PASSWORD:
+          valueFrom:
+            secretKeyRef:
+              name: n8n-postgres-app
+              key: password
+        N8N_ENCRYPTION_KEY:
+          valueFrom:
+            secretKeyRef:
+              name: n8n-app
+              key: N8N_ENCRYPTION_KEY
+        GENERIC_TIMEZONE:
+          value: Europe/Kyiv
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "512Mi"
+        limits:
+          cpu: "1"
+          memory: "1Gi"
+      podSecurityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+    webhook:
+      enabled: false                  # для високого трафіку webhook — вмикати окремо
+
+    # ── Valkey (Redis-compatible) — лише як черга для queue mode ────────────
+    # Не є primary store застосунку (CNPG лишається БД); план дозволяє auxiliary
+    # infra через Helm, бо заборона "plain StatefulSet" стосується БД застосунку.
+    valkey:
+      enabled: true
+      architecture: standalone        # 1 нода (для learning); replication — у HA-сценарії
+      auth:
+        enabled: false                # для learning; у проді — увімкнути + Secret
+      primary:
+        persistence:
+          enabled: true
+          size: 1Gi
+
+    # ── ingress (top-level) ────────────────────────────────────────────────
+    ingress:
+      enabled: true
+      className: nginx
+      annotations:
+        cert-manager.io/cluster-issuer: selfsigned-issuer
+        nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+        nginx.ingress.kubernetes.io/affinity: cookie          # editor sessions sticky на один main
+        nginx.ingress.kubernetes.io/affinity-mode: persistent
+      hosts:
+        - host: n8n.local
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - hosts:
+            - n8n.local
+          secretName: n8n-tls          # cert-manager автоматично створить цей Secret

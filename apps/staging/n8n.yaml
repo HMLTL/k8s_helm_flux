@@ -1,0 +1,115 @@
+# HelmRelease n8n у staging — 1 репліка, без HPA, без queue mode, без TLS.
+# Чарт: oci://8gears.container-registry.com/library/n8n  версія 2.0.x.
+# Значення відповідають реальній схемі: replicaCount/resources/persistence/etc.
+# лежать під main.*, БД конфігурується через main.config.db, секрети — через
+# main.extraEnv з valueFrom.secretKeyRef.
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: n8n-staging
+  namespace: flux-system
+spec:
+  interval: 1m
+  releaseName: n8n
+  targetNamespace: staging
+  dependsOn:
+    - name: n8n-env-staging           # NS + N8N_ENCRYPTION_KEY Secret + CNPG Cluster
+    - name: ingress-nginx
+  driftDetection:
+    mode: enabled                     # self-healing
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  chart:
+    spec:
+      chart: n8n
+      version: "2.0.x"                # 8gears chart (latest 2.0.1, грудень 2025)
+      sourceRef:
+        kind: HelmRepository
+        name: n8n
+        namespace: flux-system
+  values:
+    image:
+      repository: n8nio/n8n
+      tag: "1.122.4"                  # співпадає з тим, що тестував 8gears у 2.0.x
+      pullPolicy: IfNotPresent
+
+    # ── main process: editor + REST API + scheduler ─────────────────────────
+    main:
+      replicaCount: 1
+
+      # n8n-сам читає DB_POSTGRESDB_* з env. config: тут — лише non-secret поля;
+      # password і encryption key мапимо з Secrets нижче.
+      config:
+        db:
+          type: postgresdb
+          postgresdb:
+            host: n8n-postgres-rw     # CNPG read-write service
+            port: 5432
+            database: n8n
+            user: n8n
+
+      extraEnv:
+        N8N_HOST:
+          value: n8n.staging.local
+        N8N_PROTOCOL:
+          value: http
+        WEBHOOK_URL:
+          value: http://n8n.staging.local/
+        N8N_PORT:
+          value: "5678"
+        GENERIC_TIMEZONE:
+          value: Europe/Kyiv
+        # DB password з Secret, який створив CNPG.
+        DB_POSTGRESDB_PASSWORD:
+          valueFrom:
+            secretKeyRef:
+              name: n8n-postgres-app
+              key: password
+        # Encryption key з Secret, який створив n8n-env-staging.
+        N8N_ENCRYPTION_KEY:
+          valueFrom:
+            secretKeyRef:
+              name: n8n-app
+              key: N8N_ENCRYPTION_KEY
+
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "256Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+
+      persistence:
+        enabled: true                 # /home/node/.n8n (binary data, тимчасові файли)
+        type: dynamic
+        size: 1Gi
+
+      autoscaling:
+        enabled: false
+
+    # ── infrastructure switches ─────────────────────────────────────────────
+    valkey:
+      enabled: false                  # queue mode не потрібен (1 репліка)
+
+    worker:
+      enabled: false
+
+    webhook:
+      enabled: false
+
+    # ── ingress (top-level у цього чарта) ──────────────────────────────────
+    ingress:
+      enabled: true
+      className: nginx
+      hosts:
+        - host: n8n.staging.local
+          paths:
+            - path: /
+              pathType: Prefix

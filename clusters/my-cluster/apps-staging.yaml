@@ -1,0 +1,21 @@
+# Flux Kustomization "apps-staging" — оверлей staging.
+# Path вказує на ./apps/staging, який лежить ПОЗА clusters/my-cluster/, тож
+# bootstrap-Kustomization "flux-system" його не сканує (інакше HelmRelease
+# застосувались би двічі).
+# У ./apps/staging немає kustomization.yaml — Flux сам згенерує його на льоту.
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps-staging
+  namespace: flux-system
+spec:
+  interval: 1m
+  retryInterval: 1m
+  timeout: 5m
+  prune: true                       # видаляти ресурси, видалені з git
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./apps/staging

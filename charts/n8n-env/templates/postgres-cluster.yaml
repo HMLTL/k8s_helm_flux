@@ -1,0 +1,32 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.postgres.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "n8n-env.labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.postgres.instances }}
+  {{- with .Values.postgres.image }}
+  imageName: {{ . }}
+  {{- end }}
+  primaryUpdateStrategy: unsupervised
+  {{- with .Values.postgres.affinity }}
+  affinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if gt (int .Values.postgres.minSyncReplicas) 0 }}
+  minSyncReplicas: {{ .Values.postgres.minSyncReplicas }}
+  maxSyncReplicas: {{ .Values.postgres.maxSyncReplicas }}
+  {{- end }}
+  storage:
+    size: {{ .Values.postgres.storage.size }}
+    {{- with .Values.postgres.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+  bootstrap:
+    initdb:
+      database: {{ .Values.postgres.database.name }}
+      owner: {{ .Values.postgres.database.owner }}
+  resources:
+    {{- toYaml .Values.postgres.resources | nindent 4 }}

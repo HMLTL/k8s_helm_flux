@@ -1,0 +1,6 @@
+apiVersion: v2
+name: n8n-env
+description: Env-glue для n8n — Namespace + N8N_ENCRYPTION_KEY Secret + CNPG Postgres Cluster. Рендериться per environment одним HelmRelease.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

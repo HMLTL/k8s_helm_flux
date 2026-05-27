@@ -1,0 +1,58 @@
+# Flux Image Automation: сканує GHCR на нові семвер-теги і вкомічує оновлений тег
+# у apps/production/n8n.yaml (через marker-коментар {"$imagepolicy": "flux-system:n8n:tag"}).
+#
+# Потребує: контролерів image-reflector-controller та image-automation-controller,
+# які встановлюються командою `flux install --components-extra=image-reflector-controller,image-automation-controller`
+# АБО додаються через `flux bootstrap … --components-extra=...`.
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: n8n
+  namespace: flux-system
+spec:
+  image: ghcr.io/mykolap/k8s_helm_flux/n8n
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: n8n
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: n8n
+  policy:
+    semver:
+      range: ">=1.0.0"               # будь-який реліз ≥ 1.0.0; тегаймо в CI через `v1.2.3`
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta1
+kind: ImageUpdateAutomation
+metadata:
+  name: n8n
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        email: fluxcdbot@users.noreply.github.com
+        name: fluxcdbot
+      messageTemplate: |
+        chore(image): bump n8n production image
+
+        Files updated:
+        {{ range $filename, $_ := .Updated.Files -}}
+        - {{ $filename }}
+        {{ end -}}
+    push:
+      branch: main
+  update:
+    path: ./apps/production         # тільки prod автоматично оновлюється
+    strategy: Setters
